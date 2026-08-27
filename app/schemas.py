@@ -17,8 +17,22 @@ class UserCreate(BaseModel):
     email: Optional[str] = Field(default=None, max_length=255)
 
 
+class UserUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    email: Optional[str] = Field(default=None, max_length=255)
+
+    @classmethod
+    def validate_partial(cls, data: dict) -> dict:
+        return {k: v for k, v in data.items() if v is not None}
+
+
 class BookCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
+    author: Optional[str] = Field(default=None, max_length=200)
+
+
+class BookUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=300)
     author: Optional[str] = Field(default=None, max_length=200)
 
 

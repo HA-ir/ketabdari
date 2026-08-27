@@ -1,13 +1,11 @@
-from typing import AsyncGenerator
-
-from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
 from ..models import Rental, User
-from ..schemas import RentalOut, UserCreate, UserOut
+from ..schemas import RentalOut, UserCreate, UserOut, UserUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -40,7 +38,6 @@ async def list_users(
 async def get_user_or_404(user_id: int, session: AsyncSession) -> User:
     user = await session.get(User, user_id)
     if user is None:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
     return user
 
@@ -48,6 +45,45 @@ async def get_user_or_404(user_id: int, session: AsyncSession) -> User:
 @router.get("/{user_id}", response_model=UserOut)
 async def get_user(user_id: int, session: AsyncSession = Depends(get_db)) -> User:
     return await get_user_or_404(user_id, session)
+
+
+@router.patch("/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> User:
+    user = await get_user_or_404(user_id, session)
+    # exclude_unset: only touch fields the client actually sent
+    # (sending email: null really clears it; omitting it leaves it alone)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(user, field, value)
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+@router.delete("/{user_id}", status_code=204)
+async def delete_user(
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    user = await get_user_or_404(user_id, session)
+    rental_count = int(
+        (
+            await session.execute(
+                select(func.count()).select_from(Rental).where(Rental.user_id == user.id)
+            )
+        ).scalar_one()
+    )
+    if rental_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"User {user_id} has {rental_count} rental record(s) and cannot be deleted",
+        )
+    await session.delete(user)
+    await session.commit()
 
 
 @router.get("/{user_id}/rentals", response_model=list[RentalOut])

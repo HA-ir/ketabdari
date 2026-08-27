@@ -239,3 +239,86 @@ async def test_health(client):
     r = await client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+# ---------------- PATCH /users/{id} ----------------
+
+async def test_update_user_partial(client, seeded):
+    uid = seeded["users"][1]
+    r = await client.patch(f"/users/{uid}", json={"name": "Sara K."})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "Sara K."
+    # email untouched
+    assert body["email"] == "s@x.com"
+
+
+async def test_update_user_clear_email(client, seeded):
+    uid = seeded["users"][0]
+    r = await client.patch(f"/users/{uid}", json={"email": None})
+    assert r.status_code == 200
+    assert r.json()["email"] is None
+
+
+async def test_update_user_404(client, seeded):
+    r = await client.patch("/users/999", json={"name": "Ghost"})
+    assert r.status_code == 404
+
+
+# ---------------- DELETE /users/{id} ----------------
+
+async def test_delete_user(client, seeded):
+    uid = seeded["users"][1]
+    r = await client.delete(f"/users/{uid}")
+    assert r.status_code == 204
+    r2 = await client.get(f"/users/{uid}")
+    assert r2.status_code == 404
+
+
+async def test_delete_user_with_rentals_409(client, seeded):
+    uid = seeded["users"][0]
+    await client.post(
+        "/rentals",
+        json={"user_id": uid, "book_id": seeded["books"][0], "due_date": future_date()},
+    )
+    r = await client.delete(f"/users/{uid}")
+    assert r.status_code == 409
+    r2 = await client.get(f"/users/{uid}")
+    assert r2.status_code == 200
+
+
+# ---------------- PATCH /books/{id} ----------------
+
+async def test_update_book(client, seeded):
+    bid = seeded["books"][2]
+    r = await client.patch(f"/books/{bid}", json={"title": "Clean Architecture (2nd ed.)"})
+    assert r.status_code == 200
+    assert r.json()["title"] == "Clean Architecture (2nd ed.)"
+    assert r.json()["author"] == "Martin"
+
+
+async def test_update_book_404(client, seeded):
+    r = await client.patch("/books/999", json={"title": "Ghost Book"})
+    assert r.status_code == 404
+
+
+# ---------------- DELETE /books/{id} ----------------
+
+async def test_delete_book(client, seeded):
+    bid = seeded["books"][2]
+    r = await client.delete(f"/books/{bid}")
+    assert r.status_code == 204
+    r2 = await client.get(f"/books/{bid}")
+    assert r2.status_code == 404
+
+
+async def test_delete_book_with_rentals_409(client, seeded):
+    bid = seeded["books"][1]
+    await client.post(
+        "/rentals",
+        json={"user_id": seeded["users"][0], "book_id": bid, "due_date": future_date()},
+    )
+    r = await client.delete(f"/books/{bid}")
+    assert r.status_code == 409
+    r2 = await client.get(f"/books/{bid}")
+    assert r2.status_code == 200

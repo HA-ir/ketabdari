@@ -1,14 +1,21 @@
 import math
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
-from ..models import Book
-from ..schemas import BookCreate, BookOut, PaginatedBooks
+from ..models import Book, Rental
+from ..schemas import BookCreate, BookOut, BookUpdate, PaginatedBooks
 
 router = APIRouter(prefix="/books", tags=["books"])
+
+
+async def get_book_or_404(book_id: int, session: AsyncSession) -> Book:
+    book = await session.get(Book, book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+    return book
 
 
 @router.post("", response_model=BookOut, status_code=201)
@@ -36,12 +43,12 @@ async def list_books(
         stmt = stmt.where((Book.title.ilike(like)) | (Book.author.ilike(like)))
 
     total = int(
-    (
-        await session.execute(
-            select(func.count()).select_from(stmt.subquery())
-        )
-    ).scalar_one()
-)
+        (
+            await session.execute(
+                select(func.count()).select_from(stmt.subquery())
+            )
+        ).scalar_one()
+    )
 
     items_result = await session.execute(
         stmt.order_by(Book.id).offset((page - 1) * size).limit(size)
@@ -58,9 +65,41 @@ async def list_books(
 
 @router.get("/{book_id}", response_model=BookOut)
 async def get_book(book_id: int, session: AsyncSession = Depends(get_db)) -> Book:
-    from fastapi import HTTPException
+    return await get_book_or_404(book_id, session)
 
-    book = await session.get(Book, book_id)
-    if book is None:
-        raise HTTPException(status_code=404, detail=f"Book {book_id} not found")
+
+@router.patch("/{book_id}", response_model=BookOut)
+async def update_book(
+    book_id: int,
+    payload: BookUpdate,
+    session: AsyncSession = Depends(get_db),
+) -> Book:
+    book = await get_book_or_404(book_id, session)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(book, field, value)
+    session.add(book)
+    await session.commit()
+    await session.refresh(book)
     return book
+
+
+@router.delete("/{book_id}", status_code=204)
+async def delete_book(
+    book_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    book = await get_book_or_404(book_id, session)
+    rental_count = int(
+        (
+            await session.execute(
+                select(func.count()).select_from(Rental).where(Rental.book_id == book.id)
+            )
+        ).scalar_one()
+    )
+    if rental_count:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Book {book_id} has {rental_count} rental record(s) and cannot be deleted",
+        )
+    await session.delete(book)
+    await session.commit()
