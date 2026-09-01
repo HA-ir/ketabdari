@@ -1,28 +1,28 @@
-# Library Management API
+# Ketabdari (کتابداری) — Library Management API
 
-API مدیریت کتابخونه — یوزرها، کتاب‌ها و اجاره (rental). بدون احراز هویت، با CORS.
+API ساده و ماژولار مدیریت کتابخانه — مدیریت کاربران، کتاب‌ها و امانت (Rental) بر پایه FastAPI و PostgreSQL.
 
 ## استک
-- FastAPI + SQLModel + SQLAlchemy (async) + asyncpg
+- FastAPI + SQLModel + SQLAlchemy (Async) + asyncpg
 - PostgreSQL 16 (docker-compose)
-- تست: pytest + httpx (ASGI)
+- تست‌ها: pytest + pytest-asyncio + httpx (ASGI Transport)
 
-## راهاندازی
+## راه‌اندازی سریع
 ```bash
-# 1) دیتابیس
+# ۱) اجرای دیتابیس
 docker compose up -d
 
-# 2) API
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8010
+# ۲) محیط مجازی و نصب وابستگی‌ها
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888
 ```
-- Swagger: `http://localhost:8010/docs`
-- دیتابیس روی پورت `5433` میزبانی میشه (کاربر/پسورد/DB: `library`)
+- مستندات خودکار (Swagger): `http://localhost:8888/docs`
+- دیتابیس روی پورت `5433` در دسترس است.
 
-## تست
+## اجرای تست‌ها
 ```bash
 .venv/bin/pip install -r requirements-dev.txt
-# دیتابیس تست جداگانه:
+# ساخت دیتابیس تست (یکبار):
 docker exec -i library_db psql -U library -c 'CREATE DATABASE library_test;'
 .venv/bin/pytest -v
 ```
@@ -31,32 +31,25 @@ docker exec -i library_db psql -U library -c 'CREATE DATABASE library_test;'
 
 | Method | Path | توضیح |
 |--------|------|-------|
-| POST | `/users` | اضافه کردن یوزر |
-| GET | `/users` | لیست یوزرها |
-| GET | `/users/{id}` | یوزر |
-| GET | `/users/{id}/rentals` | رنت‌های یوزر |
-| POST | `/books` | اضافه کردن کتاب |
-| GET | `/books` | لیست کتابها با پجینشن (`page`, `size`, `search`) |
-| GET | `/books/{id}` | کتاب |
-| POST | `/rentals` | ثبت رنت — `user_id`, `book_id`, `due_date` (تاریخ پسدهی را caller میفرستد) |
-| GET | `/rentals` | لیست رنت‌ها |
-| GET | `/rentals/overdue` | رنت‌هایی که از `due_date` گذشته‌اند و هنوز پسداده نشده‌اند |
-| GET | `/rentals/{id}` | رنت |
-| POST | `/rentals/{id}/return` | ثبت پسدهی |
+| POST | `/users` | ایجاد کاربر جدید |
+| GET | `/users` | لیست کاربران (Pagination) |
+| GET | `/users/{id}` | دریافت اطلاعات کاربر |
+| PATCH | `/users/{id}` | ویرایش مشخصات کاربر |
+| DELETE | `/users/{id}` | حذف کاربر (در صورت داشتن رکورد امانت: `409`) |
+| GET | `/users/{id}/rentals` | لیست امانت‌های یک کاربر |
+| POST | `/books` | ایجاد کتاب جدید |
+| GET | `/books` | جستجو و لیست کتاب‌ها (`page`, `size`, `search`) |
+| GET | `/books/{id}` | دریافت اطلاعات کتاب |
+| PATCH | `/books/{id}` | ویرایش اطلاعات کتاب |
+| DELETE | `/books/{id}` | حذف کتاب (در صورت داشتن رکورد امانت: `409`) |
+| POST | `/rentals` | ثبت امانت جدید (`user_id`, `book_id`, `due_date`) |
+| GET | `/rentals` | لیست کل امانت‌ها |
+| GET | `/rentals/overdue` | لیست امانت‌های معوق (گذشته از `due_date` و بازگردانده‌نشده) |
+| GET | `/rentals/{id}` | دریافت اطلاعات امانت |
+| POST | `/rentals/{id}/return` | ثبت بازگشت کتاب |
 
-### قوانین
-- `due_date` باید در آینده باشد (وگرنه `400`)
-- کتابی که هنوز رفته دست کسی، دوباره قابل رنت نیست (`409`)
-- پسدهی دوباره‌ی یک رنت: `409`
-- یوزر/کتاب/رنت پیدا نشد: `404`
-
-## ساختار
-```
-app/
-  main.py        # FastAPI app + CORS + create_all
-  db.py          # engine + session (env: DATABASE_URL)
-  models.py      # User, Book, Rental
-  schemas.py     # request/response models
-  routers/       # users, books, rentals
-tests/test_api.py
-```
+### قوانین بیزینس
+- فیلد `due_date` باید در زمان آینده باشد (`400`).
+- کتابی که در حال حاضر به امانت رفته، مجدداً قابل امانت دادن نیست (`409`).
+- امانتی که قبلاً بازگردانده شده، دوباره قابل بازگشت نیست (`409`).
+- کاربر یا کتابی که تاریخچه امانت دارد، حذف فیزیکی نمی‌شود (`409`).
