@@ -7,7 +7,7 @@ API ساده و ماژولار مدیریت کتابخانه — مدیریت ک
 - PostgreSQL 16 (docker-compose)
 - تست‌ها: pytest + pytest-asyncio + httpx (ASGI Transport)
 
-## راه‌اندازی سریع
+## راه‌ اندازی سریع
 ```bash
 # ۱) اجرای دیتابیس
 docker compose up -d
