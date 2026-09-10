@@ -4,8 +4,9 @@ from sqlalchemy.orm import selectinload
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
-from ..models import Rental, User
+from ..models import Book, Rental, User
 from ..schemas import RentalOut, UserCreate, UserOut, UserUpdate
+from .rentals import _rental_out
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -89,13 +90,20 @@ async def delete_user(
 @router.get("/{user_id}/rentals", response_model=list[RentalOut])
 async def user_rentals(
     user_id: int, session: AsyncSession = Depends(get_db)
-) -> list[Rental]:
+) -> list[RentalOut]:
     await get_user_or_404(user_id, session)
+    # Join fast-path: one query, no ORM identity objects, no lazy loads.
     stmt = (
-        select(Rental)
-        .options(selectinload(Rental.book), selectinload(Rental.user))
+        select(
+            Rental.id, Rental.user_id, Rental.book_id,
+            Rental.due_date, Rental.returned_at, Rental.created_at,
+            User.name.label("user_name"),
+            Book.title.label("book_title"),
+        )
+        .join(User, Rental.user_id == User.id)
+        .join(Book, Rental.book_id == Book.id)
         .where(Rental.user_id == user_id)
         .order_by(Rental.id.desc())
     )
-    result = await session.execute(stmt)
-    return list(result.scalars().all())
+    rows = (await session.execute(stmt)).all()
+    return [_rental_out(r) for r in rows]

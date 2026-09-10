@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
 from ..models import Book, Rental, User
-from ..schemas import RentalCreate, RentalOut
+from ..schemas import BookBrief, RentalCreate, RentalOut, UserBrief
 
 router = APIRouter(prefix="/rentals", tags=["rentals"])
 
@@ -75,26 +75,61 @@ async def create_rental(
     return await _get_rental_or_404(rental.id, session)
 
 
+def _rental_out(r) -> RentalOut:
+    """Build a RentalOut from a joined row tuple."""
+    return RentalOut(
+        id=r.id, user_id=r.user_id, book_id=r.book_id,
+        due_date=r.due_date, returned_at=r.returned_at, created_at=r.created_at,
+        user=UserBrief(id=r.user_id, name=r.user_name),
+        book=BookBrief(id=r.book_id, title=r.book_title),
+    )
+
+
 @router.get("/overdue", response_model=list[RentalOut])
-async def list_overdue(session: AsyncSession = Depends(get_db)) -> list[Rental]:
+async def list_overdue(
+    limit: int | None = Query(default=None, ge=1, le=10000),
+    session: AsyncSession = Depends(get_db),
+) -> list[RentalOut]:
+    # Fast path: single join query -> row tuples -> pydantic models.
+    # No ORM identity-map objects (3 per row), no selectinload round-trips.
     stmt = (
-        select(Rental)
-        .options(*_RENTAL_OPTS)
+        select(
+            Rental.id, Rental.user_id, Rental.book_id,
+            Rental.due_date, Rental.returned_at, Rental.created_at,
+            User.name.label("user_name"),
+            Book.title.label("book_title"),
+        )
+        .join(User, Rental.user_id == User.id)
+        .join(Book, Rental.book_id == Book.id)
         .where(Rental.returned_at.is_(None), Rental.due_date < _utcnow())
         .order_by(Rental.due_date)
     )
-    result = await session.execute(stmt)
-    return list(result.scalars().all())
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = (await session.execute(stmt)).all()
+    return [_rental_out(r) for r in rows]
 
 
 @router.get("", response_model=list[RentalOut])
 async def list_rentals(
-    limit: int = Query(default=100, ge=1, le=500),
+    limit: int = Query(default=100, ge=1, le=10000),
     session: AsyncSession = Depends(get_db),
-) -> list[Rental]:
-    stmt = select(Rental).options(*_RENTAL_OPTS).order_by(Rental.id).limit(limit)
-    result = await session.execute(stmt)
-    return list(result.scalars().all())
+) -> list[RentalOut]:
+    # Same join fast-path as /overdue: one query, tuples -> pydantic, no ORM objects.
+    stmt = (
+        select(
+            Rental.id, Rental.user_id, Rental.book_id,
+            Rental.due_date, Rental.returned_at, Rental.created_at,
+            User.name.label("user_name"),
+            Book.title.label("book_title"),
+        )
+        .join(User, Rental.user_id == User.id)
+        .join(Book, Rental.book_id == Book.id)
+        .order_by(Rental.id)
+        .limit(limit)
+    )
+    rows = (await session.execute(stmt)).all()
+    return [_rental_out(r) for r in rows]
 
 
 @router.get("/{rental_id}", response_model=RentalOut)

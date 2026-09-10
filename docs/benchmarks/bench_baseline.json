@@ -1,0 +1,92 @@
+[
+  {
+    "endpoint": "GET /health",
+    "n": 30,
+    "codes": "200",
+    "mean": 0.6,
+    "p50": 0.6,
+    "p95": 0.6,
+    "p99": 0.7,
+    "max": 0.7
+  },
+  {
+    "endpoint": "GET /users?page=1&size=100",
+    "n": 30,
+    "codes": "200",
+    "mean": 3.3,
+    "p50": 3.4,
+    "p95": 4.5,
+    "p99": 5.0,
+    "max": 5.0
+  },
+  {
+    "endpoint": "GET /users/1500",
+    "n": 30,
+    "codes": "200",
+    "mean": 2.8,
+    "p50": 2.8,
+    "p95": 3.8,
+    "p99": 4.3,
+    "max": 4.3
+  },
+  {
+    "endpoint": "GET /users/1500/rentals",
+    "n": 30,
+    "codes": "200",
+    "mean": 5.7,
+    "p50": 5.7,
+    "p95": 8.9,
+    "p99": 9.6,
+    "max": 9.6
+  },
+  {
+    "endpoint": "GET /books?page=1&size=50",
+    "n": 30,
+    "codes": "200",
+    "mean": 3.2,
+    "p50": 3.1,
+    "p95": 4.4,
+    "p99": 5.6,
+    "max": 5.6
+  },
+  {
+    "endpoint": "GET /books?page=10&size=50",
+    "n": 30,
+    "codes": "200",
+    "mean": 3.0,
+    "p50": 2.9,
+    "p95": 4.0,
+    "p99": 4.4,
+    "max": 4.4
+  },
+  {
+    "endpoint": "GET /books?search=clean&page=1&size=20",
+    "n": 30,
+    "codes": "200",
+    "mean": 14.8,
+    "p50": 15.8,
+    "p95": 20.6,
+    "p99": 21.0,
+    "max": 21.0
+  },
+  {
+    "endpoint": "GET /rentals?page=1&size=50",
+    "n": 30,
+    "codes": "200",
+    "mean": 32.8,
+    "p50": 10.1,
+    "p95": 86.5,
+    "p99": 609.1,
+    "max": 609.1
+  },
+  {
+    "endpoint": "GET /rentals/overdue",
+    "n": 30,
+    "codes": "200",
+    "mean": 266.5,
+    "p50": 267.9,
+    "p95": 312.0,
+    "p99": 312.2,
+    "max": 312.2
+  }
+]

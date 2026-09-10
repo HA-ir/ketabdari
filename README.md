@@ -2,6 +2,8 @@
 
 API ساده و ماژولار مدیریت کتابخانه — مدیریت کاربران، کتاب‌ها و امانت (Rental) بر پایه FastAPI و PostgreSQL.
 
+> 📈 **پرفورمنس:** با دیتای حجیم (۳k کاربر / ۱۰k کتاب / ۲۰k امانت) بنچمارک و بهینهسازی شده — `GET /rentals/overdue` **۳.۵×** و جستجوی کتابها **۲.۵×** سریعتر شدهاند. جزئیات کامل: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
+
 ## استک
 - FastAPI + SQLModel + SQLAlchemy (Async) + asyncpg
 - PostgreSQL 16 (docker-compose)
@@ -53,3 +55,14 @@ docker exec -i library_db psql -U library -c 'CREATE DATABASE library_test;'
 - کتابی که در حال حاضر به امانت رفته، مجدداً قابل امانت دادن نیست (`409`).
 - امانتی که قبلاً بازگردانده شده، دوباره قابل بازگشت نیست (`409`).
 - کاربر یا کتابی که تاریخچه امانت دارد، حذف فیزیکی نمی‌شود (`409`).
+
+## پرفورمنس و بنچمارک
+```bash
+# دیتای بنچمارک (idempotent):
+docker exec -i library_db psql -U library -d library < scripts/seed_bench.sql
+# ایندکسهای بهینهسازی (یکبار):
+docker exec -i library_db psql -U library -d library < scripts/indexes.sql
+# بنچمارک:
+python3 bench.py http://localhost:8888 /tmp/bench.json
+```
+گزارش کامل: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) — داده خام: `docs/benchmarks/`
