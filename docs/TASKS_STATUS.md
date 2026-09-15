@@ -91,6 +91,8 @@ This report documents the audit findings, implementations, and benchmark results
   - Mean: 4,100.24 ms | Throughput: 1.95 req/s
   - Artifacts: `docs/benchmarks/search_4m_unindexed.png` and `docs/benchmarks/search_4m_unindexed.json`
 
+![4M Books Unindexed Benchmark](benchmarks/search_4m_unindexed.png)
+
 ---
 
 ## Task 3 — Search Benchmark After Indexing
@@ -127,6 +129,10 @@ This report documents the audit findings, implementations, and benchmark results
   - Benchmark result: `docs/benchmarks/search_4m_indexed.png` and `docs/benchmarks/search_4m_indexed.json`
   - Direct comparison chart: `docs/benchmarks/search_comparison_4m.png`
 
+![4M Books Comparison Chart](benchmarks/search_comparison_4m.png)
+
+![4M Books Indexed Benchmark Metrics](benchmarks/search_4m_indexed.png)
+
 #### 1,000 Books Dataset Comparison
 
 | Metric | Before Indexing | After Indexing | Ratio |
@@ -140,6 +146,8 @@ This report documents the audit findings, implementations, and benchmark results
 - Artifacts:
   - Benchmark result: `docs/benchmarks/search_1k_indexed.png` and `docs/benchmarks/search_1k_indexed.json`
   - Direct comparison chart: `docs/benchmarks/search_comparison_1k.png`
+
+![1K Books Comparison Chart](benchmarks/search_comparison_1k.png)
 
 **Architectural Analysis:**
 At small scale (1,000 rows), the entire dataset fits in a single memory page (under 64 KB). The sequential scan cost is sub-millisecond in memory. Parsing search terms into trigrams and traversing the GIN index tree introduces a tiny ~1 ms overhead. However, at large scale (4,000,000 rows), full-table scans saturate I/O and CPU, while GIN trigram indexes deliver dramatic 8x to 25x latency reductions across all percentiles.

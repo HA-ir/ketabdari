@@ -215,3 +215,18 @@ engine = create_async_engine(
 - نمودار ۴M بعد از ایندکس: `docs/benchmarks/search_4m_indexed.png`
 - نمودار مقایسه مستقیم ۴M: `docs/benchmarks/search_comparison_4m.png`
 - نمودار مقایسه ۱K: `docs/benchmarks/search_comparison_1k.png`
+
+<div align="center">
+  <h4>نمودار مقایسه‌ای جستجو در ۴,۰۰۰,۰۰۰ کتاب (قبل در برابر بعد از ایندکس)</h4>
+  <img src="benchmarks/search_comparison_4m.png" alt="Search 4M Comparison" width="850"/>
+</div>
+
+<div align="center">
+  <h4>گزارش زمان پاسخ‌دهی و صدک‌ها در ۴,۰۰۰,۰۰۰ کتاب (پس از ایندکس GIN)</h4>
+  <img src="benchmarks/search_4m_indexed.png" alt="Search 4M Indexed Report" width="750"/>
+</div>
+
+<div align="center">
+  <h4>نمودار مقایسه‌ای جستجو در ۱,۰۰۰ کتاب</h4>
+  <img src="benchmarks/search_comparison_1k.png" alt="Search 1K Comparison" width="850"/>
+</div>
