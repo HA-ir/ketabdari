@@ -32,16 +32,8 @@
 
 <div align="center">
   <img src="docs/benchmarks/search_comparison_4m.png" alt="Search 4M Comparison" width="850"/>
+  <p><em>PostgreSQL Trigram GIN indexes deliver a <strong>19.2× throughput increase</strong> and <strong>24.5× lower tail latency (p95)</strong> under concurrent load. Full telemetry in <a href="docs/PERFORMANCE.md">docs/PERFORMANCE.md</a>.</em></p>
 </div>
-
-| Metric | Sequential Scan (Baseline) | Trigram GIN Index | Speedup |
-|---|---|---|:---:|
-| **Throughput (RPS)** | 1.95 req/s | **37.40 req/s** | **19.2×** |
-| **Mean Latency** | 4,100.24 ms | **213.16 ms** | **19.2×** |
-| **Median (p50)** | 1,967.21 ms | **249.92 ms** | **7.9×** |
-| **Tail Latency (p95)** | 9,175.42 ms | **374.47 ms** | **24.5×** |
-
-*Measurements across 1,000 varied search requests under concurrent load (`concurrency=8`).*
 
 ---
 
