@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
 from sqlalchemy.orm import selectinload
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
@@ -37,7 +37,7 @@ async def _get_book_or_404(book_id: int, session: AsyncSession) -> Book:
 
 async def _get_rental_or_404(rental_id: int, session: AsyncSession) -> Rental:
     stmt = select(Rental).options(*_RENTAL_OPTS).where(Rental.id == rental_id)
-    rental = (await session.execute(stmt)).scalars().first()
+    rental = (await session.exec(stmt)).first()
     if rental is None:
         raise HTTPException(status_code=404, detail=f"Rental {rental_id} not found")
     return rental
@@ -57,7 +57,7 @@ async def create_rental(
             raise HTTPException(status_code=404, detail=f"User {payload.user_id} not found")
 
         stmt = select(Book).where(Book.id == payload.book_id).with_for_update()
-        book = (await session.execute(stmt)).scalars().first()
+        book = (await session.exec(stmt)).first()
         if book is None:
             raise HTTPException(status_code=404, detail=f"Book {payload.book_id} not found")
 
@@ -113,7 +113,7 @@ async def list_overdue(
     )
     if limit is not None:
         stmt = stmt.limit(limit)
-    rows = (await session.execute(stmt)).all()
+    rows = (await session.exec(stmt)).all()
     return [_rental_out(r) for r in rows]
 
 
@@ -135,7 +135,7 @@ async def list_rentals(
         .order_by(Rental.id)
         .limit(limit)
     )
-    rows = (await session.execute(stmt)).all()
+    rows = (await session.exec(stmt)).all()
     return [_rental_out(r) for r in rows]
 
 
@@ -150,7 +150,7 @@ async def return_rental(
 ) -> Rental:
     async with session.begin():
         stmt = select(Rental).where(Rental.id == rental_id).with_for_update()
-        rental = (await session.execute(stmt)).scalars().first()
+        rental = (await session.exec(stmt)).first()
         if rental is None:
             raise HTTPException(status_code=404, detail=f"Rental {rental_id} not found")
 
@@ -160,7 +160,7 @@ async def return_rental(
             )
 
         stmt_book = select(Book).where(Book.id == rental.book_id).with_for_update()
-        book = (await session.execute(stmt_book)).scalars().first()
+        book = (await session.exec(stmt_book)).first()
         if book is not None:
             book.quantity += 1
             session.add(book)

@@ -1,7 +1,8 @@
 import math
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
@@ -71,10 +72,10 @@ async def list_books(
 
     total = int(
         (
-            await session.execute(
+            await session.exec(
                 select(func.count()).select_from(stmt.subquery())
             )
-        ).scalar_one()
+        ).one()
     )
 
     sort_col = ALLOWED_SORT_FIELDS[field_key]
@@ -83,10 +84,10 @@ async def list_books(
     else:
         order_expr = [sort_col.asc(), Book.id.asc()]
 
-    items_result = await session.execute(
+    items_result = await session.exec(
         stmt.order_by(*order_expr).offset((page - 1) * size).limit(size)
     )
-    items = list(items_result.scalars().all())
+    items = list(items_result.all())
     return PaginatedBooks(
         items=items,
         total=total,
@@ -124,10 +125,10 @@ async def delete_book(
     book = await get_book_or_404(book_id, session)
     rental_count = int(
         (
-            await session.execute(
+            await session.exec(
                 select(func.count()).select_from(Rental).where(Rental.book_id == book.id)
             )
-        ).scalar_one()
+        ).one()
     )
     if rental_count:
         raise HTTPException(

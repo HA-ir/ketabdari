@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func
 from sqlalchemy.orm import selectinload
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db import get_db
@@ -30,10 +31,10 @@ async def list_users(
 ) -> list[User]:
     page = max(page, 1)
     size = max(min(size, 500), 1)
-    result = await session.execute(
+    result = await session.exec(
         select(User).order_by(User.id).offset((page - 1) * size).limit(size)
     )
-    return list(result.scalars().all())
+    return list(result.all())
 
 
 async def get_user_or_404(user_id: int, session: AsyncSession) -> User:
@@ -73,10 +74,10 @@ async def delete_user(
     user = await get_user_or_404(user_id, session)
     rental_count = int(
         (
-            await session.execute(
+            await session.exec(
                 select(func.count()).select_from(Rental).where(Rental.user_id == user.id)
             )
-        ).scalar_one()
+        ).one()
     )
     if rental_count:
         raise HTTPException(
@@ -105,5 +106,5 @@ async def user_rentals(
         .where(Rental.user_id == user_id)
         .order_by(Rental.id.desc())
     )
-    rows = (await session.execute(stmt)).all()
+    rows = (await session.exec(stmt)).all()
     return [_rental_out(r) for r in rows]
