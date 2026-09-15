@@ -30,13 +30,40 @@ async def create_book(
     return book
 
 
+ALLOWED_SORT_FIELDS = {
+    "id": Book.id,
+    "created_at": Book.created_at,
+    "title": Book.title,
+    "name": Book.title,
+    "quantity": Book.quantity,
+    "author": Book.author,
+}
+
+
 @router.get("", response_model=PaginatedBooks)
 async def list_books(
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     search: str | None = Query(default=None, description="فیلتر روی عنوان/نویسنده"),
+    sort_by: str = Query(default="id", description="Field to sort by: id, created_at, title, name, quantity"),
+    order: str | None = Query(default=None, description="Sort direction: asc or desc"),
+    sort_dir: str | None = Query(default=None, description="Alias for order: asc or desc"),
     session: AsyncSession = Depends(get_db),
 ) -> PaginatedBooks:
+    field_key = sort_by.strip().lower()
+    if field_key not in ALLOWED_SORT_FIELDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort_by field '{sort_by}'. Allowed fields: {', '.join(sorted(ALLOWED_SORT_FIELDS.keys()))}",
+        )
+
+    direction = (order or sort_dir or "asc").strip().lower()
+    if direction not in ("asc", "desc"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sort order '{direction}'. Allowed values: 'asc', 'desc'",
+        )
+
     stmt = select(Book)
     if search:
         like = f"%{search}%"
@@ -50,8 +77,14 @@ async def list_books(
         ).scalar_one()
     )
 
+    sort_col = ALLOWED_SORT_FIELDS[field_key]
+    if direction == "desc":
+        order_expr = [sort_col.desc(), Book.id.desc()]
+    else:
+        order_expr = [sort_col.asc(), Book.id.asc()]
+
     items_result = await session.execute(
-        stmt.order_by(Book.id).offset((page - 1) * size).limit(size)
+        stmt.order_by(*order_expr).offset((page - 1) * size).limit(size)
     )
     items = list(items_result.scalars().all())
     return PaginatedBooks(

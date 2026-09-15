@@ -29,11 +29,13 @@ class UserUpdate(BaseModel):
 class BookCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     author: Optional[str] = Field(default=None, max_length=200)
+    quantity: int = Field(default=1, ge=0)
 
 
 class BookUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=1, max_length=300)
     author: Optional[str] = Field(default=None, max_length=200)
+    quantity: Optional[int] = Field(default=None, ge=0)
 
 
 class RentalCreate(BaseModel):
@@ -76,6 +78,7 @@ class BookOut(BaseModel):
     id: int
     title: str
     author: Optional[str]
+    quantity: int
     created_at: datetime
 
 

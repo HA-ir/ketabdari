@@ -28,6 +28,7 @@ class User(UserBase, table=True):
 class BookBase(SQLModel):
     title: str = Field(index=True, max_length=300)
     author: Optional[str] = Field(default=None, max_length=200)
+    quantity: int = Field(default=1, ge=0)
 
 
 class Book(BookBase, table=True):

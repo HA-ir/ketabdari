@@ -48,31 +48,38 @@ async def create_rental(
     payload: RentalCreate,
     session: AsyncSession = Depends(get_db),
 ) -> Rental:
-    await _get_user_or_404(payload.user_id, session)
-    await _get_book_or_404(payload.book_id, session)
-
     if payload.due_date <= _utcnow():
         raise HTTPException(status_code=400, detail="due_date must be in the future")
 
-    stmt = select(Rental).where(
-        Rental.book_id == payload.book_id,
-        Rental.returned_at.is_(None),
-    )
-    active = (await session.execute(stmt)).scalars().first()
-    if active is not None:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Book {payload.book_id} is already rented (rental #{active.id})",
-        )
+    async with session.begin():
+        user = await session.get(User, payload.user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail=f"User {payload.user_id} not found")
 
-    rental = Rental(
-        user_id=payload.user_id,
-        book_id=payload.book_id,
-        due_date=payload.due_date,
-    )
-    session.add(rental)
-    await session.commit()
-    return await _get_rental_or_404(rental.id, session)
+        stmt = select(Book).where(Book.id == payload.book_id).with_for_update()
+        book = (await session.execute(stmt)).scalars().first()
+        if book is None:
+            raise HTTPException(status_code=404, detail=f"Book {payload.book_id} not found")
+
+        if book.quantity <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Book {payload.book_id} is not available (out of stock)",
+            )
+
+        book.quantity -= 1
+        session.add(book)
+
+        rental = Rental(
+            user_id=payload.user_id,
+            book_id=payload.book_id,
+            due_date=payload.due_date,
+        )
+        session.add(rental)
+        await session.flush()
+        rental_id = rental.id
+
+    return await _get_rental_or_404(rental_id, session)
 
 
 def _rental_out(r) -> RentalOut:
@@ -141,12 +148,24 @@ async def get_rental(rental_id: int, session: AsyncSession = Depends(get_db)) ->
 async def return_rental(
     rental_id: int, session: AsyncSession = Depends(get_db)
 ) -> Rental:
-    rental = await _get_rental_or_404(rental_id, session)
-    if rental.returned_at is not None:
-        raise HTTPException(
-            status_code=409, detail=f"Rental {rental_id} was already returned"
-        )
-    rental.returned_at = _utcnow()
-    session.add(rental)
-    await session.commit()
+    async with session.begin():
+        stmt = select(Rental).where(Rental.id == rental_id).with_for_update()
+        rental = (await session.execute(stmt)).scalars().first()
+        if rental is None:
+            raise HTTPException(status_code=404, detail=f"Rental {rental_id} not found")
+
+        if rental.returned_at is not None:
+            raise HTTPException(
+                status_code=409, detail=f"Rental {rental_id} was already returned"
+            )
+
+        stmt_book = select(Book).where(Book.id == rental.book_id).with_for_update()
+        book = (await session.execute(stmt_book)).scalars().first()
+        if book is not None:
+            book.quantity += 1
+            session.add(book)
+
+        rental.returned_at = _utcnow()
+        session.add(rental)
+
     return await _get_rental_or_404(rental_id, session)
