@@ -14,7 +14,7 @@ FROM generate_series(1, 3000) g
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'bench_user' || g || '@example.com');
 
 -- 10,000 books (titles composed from word lists)
-INSERT INTO books (title, author, created_at)
+INSERT INTO books (title, author, quantity, created_at)
 SELECT
   (ARRAY['Clean','Pragmatic','Design','Domain','Refactoring','Distributed','Systems',
          'Algorithms','Patterns','Architecture','Python','Rust','Go','Kubernetes',
@@ -23,6 +23,7 @@ SELECT
                    'Primer','Course','Notes','Manual'])[1 + (g % 10)]
   || ' #' || g,
   'Author ' || (1 + (g % 500)),
+  (1 + (g % 10)),
   NOW() - (g || ' minutes')::interval
 FROM generate_series(1, 10000) g;
 

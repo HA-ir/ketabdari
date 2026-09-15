@@ -11,7 +11,8 @@
 | Endpoint | قبل (p50) | بعد (p50) | بهبود |
 |----------|----------:|----------:|:-----:|
 | `GET /rentals/overdue` | 267.9ms | **77.0ms** | **3.5×** |
-| `GET /books?search=...` | 15.8ms | **6.4ms** | **2.5×** |
+| `GET /books?search=...` (۱۰k کتاب) | 15.8ms | **6.4ms** | **2.5×** |
+| `GET /books?search=...` (۴M کتاب - ۱k ریکوئست) | 1,967.2ms | **249.9ms** | **7.9× (p50) / 19.2× (Mean)** |
 | `GET /rentals` | 10.1ms | **6.5ms** | 1.6× |
 | `GET /users/{id}/rentals` | 5.7ms | **4.1ms** | 1.4× |
 | `GET /users` | 3.4ms | **2.9ms** | 1.2× |
@@ -124,7 +125,7 @@ stmt = (
     .where(Rental.returned_at.is_(None), Rental.due_date < _utcnow())
     .order_by(Rental.due_date)
 )
-rows = (await session.execute(stmt)).all()
+rows = (await session.exec(stmt)).all()
 return [_rental_out(r) for r in rows]   # row tuple -> pydantic مستقیم
 ```
 
