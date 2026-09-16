@@ -1,102 +1,92 @@
-<div align="center">
+# Ketabdari (کتابداری) — Library Management API
 
-# 📚 Ketabdari (کتابداری)
-### High-Performance, Concurrency-Safe Library Management API
+API ساده و ماژولار مدیریت کتابخانه — مدیریت کاربران، کتاب‌ها و امانت (Rental) بر پایه FastAPI، SQLModel و PostgreSQL.
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![SQLModel](https://img.shields.io/badge/SQLModel-Async-blue?logo=pydantic&logoColor=white)](https://sqlmodel.tiangolo.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%20%28pg__trgm%29-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Driver](https://img.shields.io/badge/Driver-asyncpg-informational)](https://github.com/MagicStack/asyncpg)
-[![Tests](https://img.shields.io/badge/Tests-37%20Passed-success?logo=pytest&logoColor=white)](tests/test_api.py)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+> 📈 **پرفورمنس و مقیاس‌پذیری:**
+> - بهینه‌سازی کوئری‌های جوین و حذف سربار ORM (۳.۵× بهبود در `GET /rentals/overdue`).
+> - بنچمارک جستجو روی **۴,۰۰۰,۰۰۰ کتاب یکتا** با ایندکس‌های Trigram GIN (`pg_trgm`) — بهبود **۱۹.۲×** در throughput و کاهش تأخیر p95 از ۹.۱ ثانیه به ۳۷۴ میلی‌ثانیه (**۲۴.۵× سریع‌تر**).
+> - جزئیات کامل: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) و [`docs/TASKS_STATUS.md`](docs/TASKS_STATUS.md).
 
-<p align="center">
-  A production-ready asynchronous REST API for library operations engineered for scale. Built with FastAPI, SQLModel, asyncpg, and PostgreSQL 16 with pg_trgm trigram acceleration.
-</p>
+![Search 4M Comparison](docs/benchmarks/search_comparison_4m.png)
 
-</div>
+## استک
+- **فریم‌ورک:** FastAPI + SQLModel + SQLAlchemy (Async) + asyncpg
+- **دیتابیس:** PostgreSQL 16 (با اکستنشن `pg_trgm`)
+- **تست‌ها:** pytest + pytest-asyncio + httpx (ASGI Transport) — ۳۷ تست
 
----
+## راه‌اندازی سریع
 
-## ⚡ Highlights
-
-- **Million-Scale Search:** Benchmarked on **4,000,000 unique books** — Trigram GIN indexes (`pg_trgm`) deliver a **19.2× throughput increase** and drop p95 tail latency by **24.5×** (from 9.1s to 374ms).
-- **Concurrency-Safe Inventory:** Physical stock (`quantity`) secured with PostgreSQL **Row-Level Locking (`SELECT ... FOR UPDATE`)** inside atomic transactions (`async with session.begin():`) to eliminate race conditions under concurrent rental bursts.
-- **Zero-ORM Fast-Path Serialization:** Streaming joined row tuples directly into Pydantic models saves >200ms per request on heavy query endpoints (`/rentals/overdue`).
-- **Flexible Sorting & Pagination:** Composable multi-field sorting (`created_at`, `title`, `quantity`, `id`) with whitelist validation and composite tie-breaking for deterministic pagination.
-
----
-
-## 📊 Performance at a Glance (4,000,000 Books)
-
-<div align="center">
-  <img src="docs/benchmarks/search_comparison_4m.png" alt="Search 4M Comparison" width="850"/>
-  <p><em>PostgreSQL Trigram GIN indexes deliver a <strong>19.2× throughput increase</strong> and <strong>24.5× lower tail latency (p95)</strong> under concurrent load. Full telemetry in <a href="docs/PERFORMANCE.md">docs/PERFORMANCE.md</a>.</em></p>
-</div>
-
----
-
-## 📖 Documentation Guide
-
-For in-depth architectural details, benchmark reports, and implementation records:
-
-| Document | What's Inside |
-|---|---|
-| ⚡ [**`docs/PERFORMANCE.md`**](docs/PERFORMANCE.md) | **Deep-Dive Performance Report:** Multi-stage query optimizations (Stages 1–5), raw execution plans (`EXPLAIN ANALYZE`), ORM elimination profiling, connection pool tuning, and comparison charts. |
-| 📑 [**`docs/TASKS_STATUS.md`**](docs/TASKS_STATUS.md) | **Audit & Implementation Changelog:** Comprehensive record of findings, row-locking design, migration DDL, search benchmark methodology, and test verifications. |
-| 🖼️ [**`docs/benchmarks/`**](docs/benchmarks/) | Raw JSON telemetry files and publication-grade chart renders for 1k and 4M book datasets. |
-| 🛠️ [**`scripts/`**](scripts/) | Production utility scripts for high-speed bulk seeding (4M in 28s), automated load benchmarking, index application, and live verification. |
-
----
-
-## 🚀 Quick Start
-
-### 1. Start Database
 ```bash
+# ۱) اجرای دیتابیس با داکر
 docker compose up -d
-```
-PostgreSQL runs on port `5433` (credentials: `library` / `library`).
 
-### 2. Run API Server
-```bash
+# ۲) محیط مجازی و نصب پکیج‌ها
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8888
 ```
-- **Interactive Swagger Docs:** [http://localhost:8888/docs](http://localhost:8888/docs)
-- **Health Check:** `curl http://localhost:8888/health`
 
-### 3. Run Test Suite
+- مستندات خودکار (Swagger): `http://localhost:8888/docs`
+- دیتابیس روی پورت `5433` در دسترس است.
+
+## اجرای تست‌ها
+
 ```bash
 pip install -r requirements-dev.txt
+
+# ساخت دیتابیس تست (یکبار):
 PGPASSWORD=library psql -h 127.0.0.1 -p 5433 -U library -d library -c "CREATE DATABASE library_test;"
+
+# اجرای تمامی تست‌ها:
 pytest -v
 ```
-*All 37 test cases validate business rules, validation errors, and concurrent race conditions.*
 
----
+## مشخصات اندپوینتها
 
-## 🛠️ Key CLI Commands
+| Method | Path | توضیح |
+|--------|------|-------|
+| POST | `/users` | ایجاد کاربر جدید |
+| GET | `/users` | لیست کاربران (Pagination) |
+| GET | `/users/{id}` | دریافت مشخصات کاربر |
+| PATCH | `/users/{id}` | ویرایش مشخصات کاربر |
+| DELETE | `/users/{id}` | حذف کاربر (در صورت داشتن رکورد امانت: `409`) |
+| GET | `/users/{id}/rentals` | لیست امانت‌های یک کاربر |
+| POST | `/books` | ایجاد کتاب جدید (`title`, `author`, `quantity`) |
+| GET | `/books` | جستجو، صفحه‌بندی و مرتب‌سازی (`page`, `size`, `search`, `sort_by`, `order`) |
+| GET | `/books/{id}` | دریافت مشخصات کتاب همراه با موجودی |
+| PATCH | `/books/{id}` | ویرایش اطلاعات یا موجودی کتاب |
+| DELETE | `/books/{id}` | حذف کتاب (در صورت داشتن تاریخچه امانت: `409`) |
+| POST | `/rentals` | ثبت امانت جدید با قفل ردیف (`user_id`, `book_id`, `due_date`) |
+| GET | `/rentals` | لیست کل امانت‌ها |
+| GET | `/rentals/overdue` | لیست امانت‌های معوق |
+| GET | `/rentals/{id}` | دریافت اطلاعات امانت |
+| POST | `/rentals/{id}/return` | ثبت بازگشت کتاب و افزایش موجودی |
+
+### قوانین بیزینس و کنترل همزمانی
+- **کنترل موجودی:** امانت کتاب منوط به `quantity > 0` است. در صورت ناموجود بودن کتاب (`quantity == 0`) پاسخ `409` برمی‌گردد.
+- **قفل ردیف (Row-Level Lock):** مسیرهای ثبت امانت و بازگشت کتاب با `SELECT ... FOR UPDATE` درون تراکنش اجرا می‌شوند تا درخواست‌های همزمان برای نسخه آخر دچار Race Condition نشوند و موجودی منفی نشود.
+- **مرتب‌سازی:** پارامتر `sort_by` روی فیلدهای `id`، `created_at`، `title`، `name` و `quantity` با جهت‌های `asc` و `desc` کار می‌کند. فیلد نامعتبر با خطای `400` رد می‌شود.
+- **تاریخ انقضا:** فیلد `due_date` باید در آینده باشد (`400`).
+- **حذف رکوردها:** کاربر یا کتابی که سابقه امانت دارد حذف فیزیکی نمی‌شود (`409`).
+
+## بنچمارک و اسکریپت‌ها
 
 ```bash
-# Bulk-seed 4,000,000 unique books via asyncpg COPY (~28 seconds):
+# تولید دیتای ۴M کتاب یکتا با asyncpg COPY در ~۲۸ ثانیه:
 python3 scripts/seed_unique_books.py --count 4000000 --truncate
 
-# Build performance indexes (partial index + trigram GIN):
+# ساخت ایندکس‌های trigram در دیتابیس:
 PGPASSWORD=library psql -h 127.0.0.1 -p 5433 -U library -d library -f scripts/indexes.sql
 
-# Run 1,000-request search benchmark:
+# اجرای بنچمارک ۱۰۰۰ ریکوئستی جستجو:
 python3 scripts/benchmark_search.py --count 1000 --concurrency 8 \
     --output-img docs/benchmarks/search_4m_indexed.png \
     --output-json docs/benchmarks/search_4m_indexed.json
 
-# Live race-condition & rental verification against running server:
+# تست صحت فرآیند امانت و قفل ردیف در محیط لایو:
 python3 scripts/verify_live_rental_flow.py
 ```
 
----
-
-<div align="center">
-  <sub>Built with FastAPI, SQLModel, asyncpg, and PostgreSQL 16. Detailed reports in <a href="docs/">docs/</a>.</sub>
-</div>
+گزارش‌های کامل‌تر:
+- گزارش مراحل بهینه‌سازی و پروفایلینگ: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
+- جزئیات پیاده‌سازی و ارزیابی فنی: [`docs/TASKS_STATUS.md`](docs/TASKS_STATUS.md)

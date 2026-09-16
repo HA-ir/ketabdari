@@ -1,10 +1,10 @@
-# Ketabdari Audit & Implementation Report
+# Ketabdari Implementation & Benchmark Notes
 
-This report documents the audit findings, implementations, and benchmark results for Tasks 1 through 4 on the Ketabdari FastAPI + SQLModel + PostgreSQL service.
+This document records the technical audit findings, schema migrations, concurrency row-locking controls, and benchmark metrics for Ketabdari.
 
 ---
 
-## Task 1 — Quantity Field & Row-Locking on Update
+## 1. Inventory Tracking & Row-Level Locking
 
 ### Audit Findings
 - **Book Model & Schemas:**
@@ -47,7 +47,7 @@ This report documents the audit findings, implementations, and benchmark results
 
 ---
 
-## Task 2 — Search Benchmark Before Indexing
+## 2. Baseline Search Benchmark (Before Indexing)
 
 ### Audit Findings
 - **Search Query:**
@@ -95,7 +95,7 @@ This report documents the audit findings, implementations, and benchmark results
 
 ---
 
-## Task 3 — Search Benchmark After Indexing
+## 3. Trigram GIN Indexing & Benchmark Comparison
 
 ### Audit & Architecture
 - Because the filter is `(title ILIKE '%term%') OR (author ILIKE '%term%')`, PostgreSQL must evaluate arbitrary substrings.
@@ -154,7 +154,7 @@ At small scale (1,000 rows), the entire dataset fits in a single memory page (un
 
 ---
 
-## Task 4 — Pagination & Sorting on the Search API
+## 4. Search API Pagination & Sorting
 
 ### Audit Findings
 - `GET /books` previously supported `page` and `size`, but had no sorting support (hardcoded to `order_by(Book.id)`).

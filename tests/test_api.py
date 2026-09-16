@@ -344,11 +344,9 @@ async def test_book_quantity_crud(client):
 
 async def test_rent_and_return_updates_quantity(client, seeded):
     book_id = seeded["books"][0]
-    # Initial quantity is 1
     book_res = await client.get(f"/books/{book_id}")
     assert book_res.json()["quantity"] == 1
 
-    # Rent 1 copy -> quantity becomes 0
     r1 = await client.post(
         "/rentals",
         json={"user_id": seeded["users"][0], "book_id": book_id, "due_date": future_date()},
@@ -369,13 +367,11 @@ async def test_books_sorting_by_date(client):
     await asyncio.sleep(0.01)
     b3 = (await client.post("/books", json={"title": "Book Gamma", "author": "Author C"})).json()
 
-    # Ascending by created_at
     r_asc = await client.get("/books", params={"sort_by": "created_at", "order": "asc"})
     assert r_asc.status_code == 200
     ids_asc = [b["id"] for b in r_asc.json()["items"]]
     assert ids_asc == [b1["id"], b2["id"], b3["id"]]
 
-    # Descending by created_at
     r_desc = await client.get("/books", params={"sort_by": "created_at", "order": "desc"})
     assert r_desc.status_code == 200
     ids_desc = [b["id"] for b in r_desc.json()["items"]]
@@ -387,13 +383,11 @@ async def test_books_sorting_by_quantity_and_name_alias(client):
     await client.post("/books", json={"title": "A Book", "quantity": 30})
     await client.post("/books", json={"title": "B Book", "quantity": 20})
 
-    # Sort by quantity desc with sort_dir alias
     r_qty = await client.get("/books", params={"sort_by": "quantity", "sort_dir": "desc"})
     assert r_qty.status_code == 200
     quantities = [b["quantity"] for b in r_qty.json()["items"]]
     assert quantities == [30, 20, 10]
 
-    # Sort by 'name' alias (maps to title) asc
     r_name = await client.get("/books", params={"sort_by": "name", "order": "asc"})
     assert r_name.status_code == 200
     titles = [b["title"] for b in r_name.json()["items"]]
@@ -401,26 +395,22 @@ async def test_books_sorting_by_quantity_and_name_alias(client):
 
 
 async def test_books_invalid_sort_rejected_400(client):
-    # Invalid sort_by field
     r1 = await client.get("/books", params={"sort_by": "secret_field"})
     assert r1.status_code == 400
     assert "Invalid sort_by field" in r1.json()["detail"]
 
-    # Invalid sort order
     r2 = await client.get("/books", params={"sort_by": "created_at", "order": "sideways"})
     assert r2.status_code == 400
     assert "Invalid sort order" in r2.json()["detail"]
 
 
 async def test_books_search_pagination_and_sort_composition(client):
-    # Seed 5 books, 4 of which match search "Python"
     await client.post("/books", json={"title": "Python Basics", "author": "Guido", "quantity": 5})
     await client.post("/books", json={"title": "Advanced Python", "author": "Luciano", "quantity": 15})
     await client.post("/books", json={"title": "Python Cookbook", "author": "Beazley", "quantity": 25})
     await client.post("/books", json={"title": "Expert Python", "author": "Tarek", "quantity": 10})
     await client.post("/books", json={"title": "Rust for Rustaceans", "author": "Gjengset", "quantity": 50})
 
-    # Search "Python", sorted by quantity descending, page 1 (size 2)
     r_page1 = await client.get("/books", params={
         "search": "Python",
         "sort_by": "quantity",
@@ -437,7 +427,6 @@ async def test_books_search_pagination_and_sort_composition(client):
     assert p1_data["items"][0]["title"] == "Python Cookbook"
     assert p1_data["items"][1]["title"] == "Advanced Python"
 
-    # Page 2 (size 2)
     r_page2 = await client.get("/books", params={
         "search": "Python",
         "sort_by": "quantity",
@@ -457,17 +446,14 @@ async def test_concurrent_return_race_condition(client, seeded):
     book_id = seeded["books"][0]
     user_id = seeded["users"][0]
 
-    # Rent the book
     rental = (await client.post(
         "/rentals",
         json={"user_id": user_id, "book_id": book_id, "due_date": future_date()},
     )).json()
     rental_id = rental["id"]
 
-    # Verify quantity is 0
     assert (await client.get(f"/books/{book_id}")).json()["quantity"] == 0
 
-    # Two concurrent return calls for the same rental
     res1, res2 = await asyncio.gather(
         client.post(f"/rentals/{rental_id}/return"),
         client.post(f"/rentals/{rental_id}/return"),
@@ -475,13 +461,11 @@ async def test_concurrent_return_race_condition(client, seeded):
     status_codes = sorted([res1.status_code, res2.status_code])
     assert status_codes == [200, 409]
 
-    # Quantity must be incremented exactly once (0 -> 1)
     assert (await client.get(f"/books/{book_id}")).json()["quantity"] == 1
 
 
 async def test_concurrent_rent_last_copy_race_condition(client, seeded):
     book_id = seeded["books"][0]
-    # book has quantity=1
     u1, u2 = seeded["users"][0], seeded["users"][1]
 
     res1, res2 = await asyncio.gather(
@@ -490,26 +474,21 @@ async def test_concurrent_rent_last_copy_race_condition(client, seeded):
     )
 
     status_codes = sorted([res1.status_code, res2.status_code])
-    # Exactly one 201 and one 409
     assert status_codes == [201, 409], f"Unexpected status codes: {status_codes}"
 
-    # Quantity must be exactly 0, never negative
     book_res = await client.get(f"/books/{book_id}")
     assert book_res.json()["quantity"] == 0
 
 
 async def test_concurrent_rent_multi_copy_race_condition(client):
-    # Create book with quantity = 3
     b = (await client.post("/books", json={"title": "High Concurrency", "quantity": 3})).json()
     book_id = b["id"]
 
-    # Create 6 users
     users = []
     for i in range(6):
         u = (await client.post("/users", json={"name": f"User_{i}", "email": f"u{i}@race.com"})).json()
         users.append(u["id"])
 
-    # 6 concurrent rental attempts for 3 copies
     tasks = [
         client.post("/rentals", json={"user_id": uid, "book_id": book_id, "due_date": future_date()})
         for uid in users
