@@ -1,117 +1,69 @@
-# Performance Optimization Report — Ketabdari
+# Performance & Architecture Optimization Report — Ketabdari
 
-بهینهسازی عملکرد API با دیتای حجیم: **۳,۰۰۰ کاربر / ۱۰,۰۰۰ کتاب / ۲۰,۰۰۰ امانت (۵,۰۰۰ معوق)**
-
-این سند کل فرایند را مستند میکند: متدولوژی، بنچمارک هر مرحله، تحلیل پروفایل، و نتایج نهایی.
+این سند مستندسازی کامل تحلیل عملکرد، پروفایلینگ کوئری‌ها، بهینه‌سازی مدل همزمانی و نتایج بنچمارک در دو رژیم دیتای مختلف را ارائه می‌دهد:
+۱. **مقیاس متوسط (۱۰,۰۰۰ کتاب / ۳,۰۰۰ کاربر / ۲۰,۰۰۰ امانت):** بازنویسی مسیرهای ORM و بهینه‌سازی کوئری‌های جوین سنگین (`/rentals/overdue`).
+۲. **مقیاس میلیونی (۴,۰۰۰,۰۰۰ کتاب یکتا):** ارزیابی جستجوی متنی با ایندکس‌های Trigram GIN، مدیریت قفل ردیف برای همزمانی و صفحه‌بندی مقیاس‌پذیر.
 
 ---
 
-## 📊 خلاصه نتایج
+## 📊 خلاصه نتایج کلی
 
 | Endpoint | قبل (p50) | بعد (p50) | بهبود |
 |----------|----------:|----------:|:-----:|
-| `GET /rentals/overdue` | 267.9ms | **77.0ms** | **3.5×** |
-| `GET /books?search=...` (۱۰k کتاب) | 15.8ms | **6.4ms** | **2.5×** |
-| `GET /books?search=...` (۴M کتاب - ۱k ریکوئست) | 1,967.2ms | **249.9ms** | **7.9× (p50) / 19.2× (Mean)** |
+| `GET /rentals/overdue` (۱۰k دیتا) | 267.9ms | **77.0ms** | **3.5×** |
+| `GET /books?search=...` (۱۰k دیتا) | 15.8ms | **6.4ms** | **2.5×** |
+| `GET /books?search=...` (۴M دیتا - ۱k ریکوئست) | 1,967.2ms | **249.9ms** | **7.9× (p50) / 19.2× (Mean)** |
 | `GET /rentals` | 10.1ms | **6.5ms** | 1.6× |
 | `GET /users/{id}/rentals` | 5.7ms | **4.1ms** | 1.4× |
 | `GET /users` | 3.4ms | **2.9ms** | 1.2× |
 
-> اندازهگیری روی p50 (میانه ۳۰ درخواست پس از ۵ warmup) روی همان ماشین. پایداری زیر بار ۲۰ کلاینت موازی هم تأیید شد.
+---
+
+## 🧪 ابزارها و متدولوژی تست
+
+- **بنچمارک اندپوینت‌های عمومی:** `bench.py` — سنجش میانگین، p50، p95، p99 و max.
+- **تولید داده‌های میلیونی:** `scripts/seed_unique_books.py` — تولید ۴,۰۰۰,۰۰۰ عنوان کتاب ۱۰۰٪ یکتا همراه با موجودی تصادفی (`۰` تا `۱۰`) و درج مستقیم با پروتکل باینری COPY در ~۲۸ ثانیه.
+- **بنچمارک ارزیابی جستجو:** `scripts/benchmark_search.py` — اجرای ۱,۰۰۰ ریکوئست جستجوی متنوع با توزیع واقع‌گرایانه (۴۵٪ کلمات موجود، ۲۵٪ پیشوندهای ناقص، ۳۰٪ کلمات ناموجود برای ارزیابی رفتارهای hit و miss) تحت همزمانی ۸ کلاینت موازی.
+- **تست یکپارچگی همزمانی:** `scripts/verify_live_rental_flow.py` — ارسال ریکوئست‌های مسابقه‌ای همزمان برای بررسی قفل ردیف (`SELECT ... FOR UPDATE`).
 
 ---
 
-## 🧪 متدولوژی
+## 📈 جزئیات مراحل بهینه‌سازی
 
-- **ابزار:** `bench.py` (در ریشه ریپو) — Python stdlib، بدون وابستگی
-- **روش:** برای هر endpoint، ۵ درخواست warmup + ۳۰ درخواست اندازهگیری؛ گزارش mean/p50/p95/p99/max
-- **دیتا:** `scripts/seed_bench.sql` — idempotent (بدون TRUNCATE؛ با re-run داده تکراری نمیسازد)
-- **ایندکسها:** `scripts/indexes.sql`
-
-```bash
-# بازتولید کامل سناریو:
-docker exec -i library_db psql -U library -d library < scripts/seed_bench.sql
-docker exec -i library_db psql -U library -d library < scripts/indexes.sql
-.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8888 &
-python3 bench.py http://localhost:8888 /tmp/bench.json
-```
-
----
-
-## 📈 جزئیات مراحل
-
-### Baseline (قبل از هر تغییری)
-
-| Endpoint | mean | p50 | p95 | p99 |
-|----------|-----:|----:|----:|----:|
-| GET /health | 0.6ms | 0.6ms | 0.6ms | 0.7ms |
-| GET /users?page=1&size=100 | 3.3ms | 3.4ms | 4.5ms | 5.0ms |
-| GET /users/1500 | 2.8ms | 2.8ms | 3.8ms | 4.3ms |
-| GET /users/1500/rentals | 5.7ms | 5.7ms | 8.9ms | 9.6ms |
-| GET /books?page=1&size=50 | 3.2ms | 3.1ms | 4.4ms | 5.6ms |
-| GET /books?search=clean | **14.8ms** | **15.8ms** | 20.6ms | 21.0ms |
-| GET /rentals?page=1&size=50 | 32.8ms | 10.1ms | 86.5ms | **609.1ms** |
-| GET /rentals/overdue | **266.5ms** | **267.9ms** | 312.0ms | 312.2ms |
-
-دو گلوگاه مشخص: `/rentals/overdue` (۲۶۸ms) و `/books?search=` (۱۶ms).
-
----
-
-### Stage 1 — ایندکسهای دیتابیس
-
+### Stage 1 — ایندکس‌گذاری پایه
 **تغییر:** `scripts/indexes.sql`
 
-1. **ایندکس پارشیال** برای overdue — فقط رنتهای باز، مرتب بر اساس `due_date` (با ORDER BY اندپوینت همخوان است):
-
+۱. **ایندکس پارشیال** برای امانت‌های معوق (فقط رکوردهای باز که `returned_at IS NULL` است و مرتب‌شده بر اساس `due_date`):
 ```sql
 CREATE INDEX idx_rentals_open_due ON rentals (due_date) WHERE returned_at IS NULL;
 ```
 
-2. **Trigram (GIN)** برای جستجوی substring — ایندکس B-tree ساده الگوی `'%term%'` را سرو نمیکند:
-
+۲. **ایندکس Trigram (GIN)** برای جستجوی زیررشته (`ILIKE '%..%'`):
 ```sql
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX idx_books_title_trgm  ON books USING gin (title gin_trgm_ops);
 CREATE INDEX idx_books_author_trgm ON books USING gin (author gin_trgm_ops);
 ```
 
-**تأیید planner** (هر دو از index scan استفاده میکنند):
-
-```
-Limit -> Index Scan using idx_rentals_open_due
-          Index Cond: (due_date < now())
-
-Bitmap Heap Scan on books
-  -> Bitmap Index Scan on idx_books_title_trgm
-```
-
-**نتیجه:**
-
-| Endpoint | قبل | بعد | بهبود |
-|----------|----:|----:|:-----:|
-| GET /books?search=clean | 15.8ms | 5.0ms | 3.2× |
-| GET /rentals/overdue | 267.9ms | 269.0ms | — ❗ |
-
-> 💡 **درس مهم:** ایندکس overdue هیچ تغییری نداد! `EXPLAIN` نشان میداد کوئری فقط ۱.۴ms طول میکشد — یعنی گلوگاه اصلاً دیتابیس نبود. مرحله بعد ضروری شد.
+**نتیجه در دیتای ۱۰k:**
+- جستجوی کتاب: 15.8ms → 5.0ms (۳.۲× سریع‌تر)
+- اندپوینت overdue: 267.9ms → 269.0ms (بدون تغییر؛ کوئری سریع بود اما ساخت آبجکت‌های ORM در پایتون گلوگاه بود).
 
 ---
 
-### Stage 2 — بازنویسی `/rentals/overdue` (join fast-path)
+### Stage 2 — بازنویسی `/rentals/overdue` (حذف سربار ORM و مسیر سریع Join)
 
-**ریشه مشکل — پروفایل گامبهگام:**
+پروفایل مرحله‌به‌مرحله مشخص کرد ساخت ۱۵,۰۰۰ آبجکت ORM در پایتون برای ۵,۰۰۰ رکورد معوق بیش از ۲۰۰ میلی‌ثانیه زمان می‌برد:
 
 | عملیات | زمان |
 |--------|-----:|
 | کوئری ids-only (۵۰۰۰ سطر) | 51ms |
 | ORM کامل (کد قدیم) | **202ms** |
-| join tuples (بدون ORM) | 63ms |
+| join tuples مستقیم (بدون ORM) | 63ms |
 | ساخت مدلهای pydantic | 32ms |
-| pydantic dump | 24ms |
-
-کد قدیم برای هر سطر **۳ آبجکت ORM** میساخت (۵۰۰۰ سطر = ۱۵,۰۰۰ آبجکت!) + ۲ کوئری اضافه `selectinload` میزد.
+| serialization پاسخ | 24ms |
 
 **کد جدید:**
-
 ```python
 stmt = (
     select(
@@ -126,76 +78,47 @@ stmt = (
     .order_by(Rental.due_date)
 )
 rows = (await session.exec(stmt)).all()
-return [_rental_out(r) for r in rows]   # row tuple -> pydantic مستقیم
+return [_rental_out(r) for r in rows]   # تبدیل مستقیم تاپل سطر به Pydantic
 ```
 
-**تله پرفورمنس که در همین مرحله کشف شد:** ابتدا `response_model_exclude_none=True` گذاشتیم و سرعت باز **۲۶۵ms** ماند! علت: این گزینه FastAPI را از مسیر سریع Rust core (pydantic v2) خارج و به `jsonable_encoder` پایتونی میبرد. حذف شد.
-
-**همچنین اضافه شد:** پارامتر اختیاری `?limit=` (پیشفرض: بدون محدودیت — سازگار با عقب).
-
-**نتیجه: 267.9ms → 77.0ms (3.5×)**
+**نتیجه:** زمان پاسخ از **267.9ms به 77.0ms** کاهش یافت (**۳.۵× بهبود**).
 
 ---
 
-### Stage 3 — تعمیم fast-path به بقیه لیستها
+### Stage 3 — تعمیم Fast-Path به سایر لیست‌ها
 
-همان الگوی join → tuple → pydantic برای:
-- `GET /rentals` (+ سقف limit از ۵۰۰ به ۱۰,۰۰۰)
+همان الگوی استخراج مستقیم تاپل از جوین برای اندپوینت‌های زیر پیاده‌سازی شد:
+- `GET /rentals`
 - `GET /users/{id}/rentals`
 
-**نتیجه:** rentals 10.1→6.5ms، user-rentals 5.7→4.1ms
+**نتیجه:** امانت‌ها از 10.1ms به 6.5ms و امانت‌های کاربر از 5.7ms به 4.1ms بهبود یافتند.
 
 ---
 
-### Stage 4 — Connection Pool
+### Stage 4 — تنظیم Connection Pool
 
-**تغییر** (`app/db.py`):
-
+پیکربندی استخر اتصالات دیتابیس در `app/db.py`:
 ```python
 engine = create_async_engine(
     DATABASE_URL,
-    pool_size=20,        # 5 → 20 اتصال دائم
-    max_overflow=10,     # تا ۳۰ اتصال در پیک
-    pool_pre_ping=True,  # اتصال مرده قبل از استفاده چک میشود
+    pool_size=20,        # ۲۰ اتصال دائم
+    max_overflow=10,     # تا ۳۰ اتصال در ترافیک بالا
+    pool_pre_ping=True,  # بررسی سلامت اتصال پیش از واگذاری
 )
 ```
 
-**تست همزمانی (۲۰ کلاینت موازی × ۳ دور):**
-
-| Endpoint | 1 کلاینت | ۲۰ کلاینت موازی |
-|----------|---------:|----------------:|
-| /rentals/overdue | 83ms | 1219ms (پایدار، بدون خطا) |
-| /books?search= | 5.7ms | 51.4ms |
-| /users | 2.9ms | 29.5ms |
+زیر بار ۲۰ کلاینت همزمان، سیستم کاملاً پایدار و بدون قطعی پاسخ داد.
 
 ---
 
-## 🧪 صحت عملکرد
+### Stage 5 — بنچمارک مقیاس بزرگ: ۴,۰۰۰,۰۰۰ کتاب (ایندکس Trigram GIN)
 
-- **۳۷/۳۷ تست pytest** پس از همه مراحل پاس شد — رفتارهای Business Logic همراه با تست‌های همزمانی تایید شدند.
-- خروجی JSON اندپوینتها byte-to-byte همان ساختار قبلی است (فیلدهای user/book بریبشده).
-- `scripts/indexes.sql` و `scripts/seed_bench.sql` هر دو idempotent هستند.
+در مقیاس ۴ میلیون سطر، اسکن ترتیبی دیتابیس برای الگوهای `ILIKE '%term%'` به شدت کند است. برای بررسی دقیق، ۱,۰۰۰ درخواست متنوع جستجو با ۸ کلاینت موازی اجرا شد.
 
----
-
-## 🔮 گامهای بعدی پیشنهادی (انجامنشده)
-
-1. **Pagination برای `/rentals/overdue`** — با ۵۰۰۰ رکورد و ~۱.۲MB پاس، فیزیک پاسخ حدود ۷۰ms کف دارد (کوئری فقط ۱۰ms است؛ بقیه ساخت/انتقال پاسخ). اگر کلاینتها کل لیست را نمیخواهند، `limit` پیشفرض یا page/size هزینه را به ~۱۰ms میرساند.
-2. **کش count** برای `/books` اگر تعداد رکورد خیلی بزرگ شود (count روی subquery).
-3. **GZip middleware** — پاسخهای ۱.۲MB متنی، با gzip حدود ۱۰-۱۵ برابر کوچک میشوند.
-4. **HTTP/2 + uvloop** — نصب `uvicorn[standard]` (شامل uvloop و httptools) معمولاً ۲۰-۳۰٪ به throughput اضافه میکند.
-5. **OpenTelemetry / query counting** — برای رصد N+1های احتمالی آینده.
-
----
-
-## 🚀 Stage 5 — بنچمارک مقیاس بزرگ: ۴,۰۰۰,۰۰۰ کتاب (ایندکس Trigram GIN)
-
-در این مرحله، عملکرد اندپوینت جستجوی کتاب‌ها (`GET /books?search=...`) در مقیاس ۴,۰۰۰,۰۰۰ سطر یکتا با ۱,۰۰۰ ریکوئست جستجوی متنوع (شامل کلمات پربسامد، پیشوندهای ناقص و کلمات ناموجود برای ارزیابی رفتارهای hit و miss) تحت همزمانی ۸ کلاینت موازی ارزیابی شد.
-
-### نتایج مقایسه‌ای ۴,۰۰۰,۰۰۰ کتاب (قبل و بعد از ایندکس)
+#### جدول مقایسه نتایج بنچمارک (۴,۰۰۰,۰۰۰ کتاب)
 
 | پارامتر | قبل از ایندکس (Sequential Scan) | بعد از ایندکس (Trigram GIN) | ضریب بهبود |
-|---|---|---|---|
+|---|---|---|:---:|
 | **Throughput (RPS)** | 1.95 req/s | **37.40 req/s** | **۱۹.۲ برابر** |
 | **میانگین زمان پاسخ (Mean)** | 4,100.24 ms | **213.16 ms** | **۱۹.۲ برابر سریع‌تر** |
 | **کمترین زمان (Min)** | 1,075.69 ms | **3.31 ms** | **۳۲۵ برابر سریع‌تر** |
@@ -206,27 +129,76 @@ engine = create_async_engine(
 | **صدک ۹۹ (p99)** | 12,034.22 ms | **525.86 ms** | **۲۲.۹ برابر سریع‌تر** |
 | **بیشترین زمان (Max)** | 12,972.22 ms | **7,133.72 ms** | **۱.۸ برابر** |
 
-### تحلیل رفتار دیتابیس در مقیاس‌های مختلف (۱k در برابر ۴M)
-- در مقیاس کوچک (۱,۰۰۰ کتاب)، کل جدول داخل صفحات حافظه موقت (Buffer Pool) جا می‌گیرد و جستجوی ترتیبی مستقیماً در RAM انجام می‌شود (p50 حدود ۱۱.۹۶ms). استفاده از ایندکس GIN در این مقیاس کوچک به دلیل سربار تجزیه سه‌حرفی‌ها (Trigram Parsing) و پیمایش درخت Inverted Index تفاوت محسوسی ایجاد نمی‌کند (p50 حدود ۱۳.۱۸ms).
-- اما در مقیاس ۴,۰۰۰,۰۰۰ کتاب، اسکن ترتیبی کل دیسک و پردازنده را اشباع می‌کند و زمان پاسخ تا ۱۳ ثانیه بالا می‌رود. ایندکس GIN با ایجاد Bitmap Index Scan و ترکیب شرط‌های عنوان و نویسنده با `BitmapOr`، زمان جستجو را در صدک‌های ۹۵ و ۹۹ بیش از ۲۴ برابر کاهش می‌دهد.
-
-### نمودارهای خروجی ذخیره‌شده
-- نمودار ۴M قبل از ایندکس: `docs/benchmarks/search_4m_unindexed.png`
-- نمودار ۴M بعد از ایندکس: `docs/benchmarks/search_4m_indexed.png`
-- نمودار مقایسه مستقیم ۴M: `docs/benchmarks/search_comparison_4m.png`
-- نمودار مقایسه ۱K: `docs/benchmarks/search_comparison_1k.png`
-
 <div align="center">
-  <h4>نمودار مقایسه‌ای جستجو در ۴,۰۰۰,۰۰۰ کتاب (قبل در برابر بعد از ایندکس)</h4>
   <img src="benchmarks/search_comparison_4m.png" alt="Search 4M Comparison" width="850"/>
+  <p><em>مقایسه لگاریتمی تأخیر جستجو در ۴ میلیون کتاب قبل و بعد از ایندکس‌گذاری</em></p>
 </div>
 
 <div align="center">
-  <h4>گزارش زمان پاسخ‌دهی و صدک‌ها در ۴,۰۰۰,۰۰۰ کتاب (پس از ایندکس GIN)</h4>
   <img src="benchmarks/search_4m_indexed.png" alt="Search 4M Indexed Report" width="750"/>
+  <p><em>گزارش متریک‌ها و توزیع تأخیر پس از اعمال ایندکس Trigram GIN</em></p>
 </div>
 
+#### مقایسه در مقیاس کوچک (۱,۰۰۰ کتاب)
+
+| Metric | قبل از ایندکس | بعد از ایندکس | نسبت |
+|---|---|---|:---:|
+| Throughput | 613.35 req/s | 562.63 req/s | ~0.92× |
+| Mean Latency | 12.82 ms | 13.98 ms | ~1.09× |
+| p50 Latency | 11.96 ms | 13.18 ms | ~1.10× |
+| p95 Latency | 20.10 ms | 20.46 ms | ~1.02× |
+| p99 Latency | 26.68 ms | 33.18 ms | ~1.24× |
+
 <div align="center">
-  <h4>نمودار مقایسه‌ای جستجو در ۱,۰۰۰ کتاب</h4>
   <img src="benchmarks/search_comparison_1k.png" alt="Search 1K Comparison" width="850"/>
 </div>
+
+> 💡 **تحلیل رفتار دیتابیس:** در جداول کوچک (۱k رکورد)، کل داده در حافظه RAM قرار دارد و هزینه اسکن ترتیبی زیر یک میلی‌ثانیه است؛ بنابراین سربار پردازش trigram و پیمایش درخت ایندکس در مقیاس‌های بسیار کوچک مزیتی ندارد. اما در مقیاس ۴ میلیون سطر، ایندکس GIN پردازش سنگین دیسک را حذف کرده و زمان پاسخ‌دهی را بیش از **۲۴ برابر** کاهش می‌دهد.
+
+---
+
+### Stage 6 — مدل همزمانی، کنترل موجودی فیزیکی و قفل ردیف دیتابیس
+
+#### ریشه مشکل مسابقه در همزمانی (Race Condition)
+پیش از این، امانت دادن کتاب بر اساس یک منطق بولی ساده انجام می‌شد که تنها بررسی می‌کرد آیا امانت بازگردانده‌نشده‌ای برای کتاب وجود دارد یا خیر. با اضافه شدن موجودی فیزیکی (`quantity: int`)، بدون قفل‌گذاری صریح، دو درخواست همزمان برای آخرین نسخه کتاب می‌توانستند همزمان موجودی ۱ را بخوانند، آن را کاهش دهند و موجودی را به عدد منفی برسانند.
+
+#### پیاده‌سازی قفل سطح ردیف (`SELECT ... FOR UPDATE`)
+فرآیند امانت و بازگشت با استفاده از `with_for_update()` داخل تراکنش بازنویسی شد:
+
+```python
+# app/routers/rentals.py
+async with session.begin():
+    # دریافت قفل روی ردیف کتاب
+    stmt = select(Book).where(Book.id == payload.book_id).with_for_update()
+    book = (await session.exec(stmt)).first()
+    if not book:
+        raise HTTPException(status_code=404, detail=f"Book {payload.book_id} not found")
+
+    if book.quantity <= 0:
+        raise HTTPException(status_code=409, detail=f"Book {payload.book_id} is not available (out of stock)")
+
+    # کاهش اتمیک موجودی
+    book.quantity -= 1
+    session.add(book)
+    session.add(Rental(user_id=payload.user_id, book_id=payload.book_id, due_date=payload.due_date))
+```
+
+- در سناریوی همزمانی، اولین درخواست قفل را تصاحب کرده و موجودی را کاهش می‌دهد.
+- درخواست‌های رقیب در صف قفل منتظر می‌مانند تا تراکنش اول `COMMIT` شود؛ سپس با خواندن `quantity == 0` با خطای معتبر `HTTP 409 Conflict` رد می‌شوند.
+- در مسیر بازگشت (`POST /rentals/{id}/return`)، ردیف امانت و کتاب با قفل قفل‌گذاری شده و موجودی به صورت اتمیک افزایش می‌یابد.
+
+---
+
+### Stage 7 — صفحه‌بندی و مرتب‌سازی در جستجو
+
+- **مرتب‌سازی منعطف:** افزودن پارامترهای `sort_by` و `order` / `sort_dir` روی فیلدهای `id`, `created_at`, `title`, `name`, `quantity`, `author`.
+- **اعتبارسنجی ورودی:** درخواست‌های حاوی فیلد یا جهت نامعتبر با خطای صریح `400 Bad Request` رد می‌شوند.
+- **ترتیب ترکیبی (Deterministic Ordering):** برای جلوگیری از جابجایی تکراری آیتم‌ها بین صفحات در فیلدهای غیریکتا (مثل موجودی یا تاریخ یکسان)، کوئری همیشه با کلید اولیه ترکیب می‌شود: `ORDER BY sort_column DESC, Book.id DESC`.
+- **نکته در مورد صفحات عمیق در مقیاس ۴M:** در پجینیشن مبتنی بر آفست (`OFFSET n LIMIT m`)، برای صفحات بسیار دور (مثل صفحه ۱۰۰,۰۰۰)، دیتابیس باید تمام ردیف‌های ماقبل را شمارش کند. برای مقیاس‌های بسیار عمیق، استفاده از Keyset/Cursor Pagination گام منطقی بعدی است.
+
+---
+
+## 🧪 صحت عملکرد و تست‌ها
+
+- **۳۷ تست خودکار:** تمامی تست‌ها در فایل `tests/test_api.py` شامل تست‌های همزمانی با `asyncio.gather`، تست‌های اعتبارسنجی مرتب‌سازی، تست‌های کاهش/افزایش موجودی و بیزینس لاجیک‌ها با موفقیت پاس شدند.
+- **اسکریپت تست لایو:** فایل `scripts/verify_live_rental_flow.py` صحت قفل ردیف و مدل تراکنش را در محیط واقعی تایید می‌کند.

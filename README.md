@@ -5,7 +5,7 @@ API ساده و ماژولار مدیریت کتابخانه — مدیریت ک
 > 📈 **پرفورمنس و مقیاس‌پذیری:**
 > - بهینه‌سازی کوئری‌های جوین و حذف سربار ORM (۳.۵× بهبود در `GET /rentals/overdue`).
 > - بنچمارک جستجو روی **۴,۰۰۰,۰۰۰ کتاب یکتا** با ایندکس‌های Trigram GIN (`pg_trgm`) — بهبود **۱۹.۲×** در throughput و کاهش تأخیر p95 از ۹.۱ ثانیه به ۳۷۴ میلی‌ثانیه (**۲۴.۵× سریع‌تر**).
-> - جزئیات کامل: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) و [`docs/TASKS_STATUS.md`](docs/TASKS_STATUS.md).
+> - گزارش و تحلیل کامل: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ![Search 4M Comparison](docs/benchmarks/search_comparison_4m.png)
 
@@ -87,6 +87,4 @@ python3 scripts/benchmark_search.py --count 1000 --concurrency 8 \
 python3 scripts/verify_live_rental_flow.py
 ```
 
-گزارش‌های کامل‌تر:
-- گزارش مراحل بهینه‌سازی و پروفایلینگ: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
-- جزئیات پیاده‌سازی و ارزیابی فنی: [`docs/TASKS_STATUS.md`](docs/TASKS_STATUS.md)
+گزارش تحلیلی کامل بنچمارک‌ها و معماری همزمانی: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)
