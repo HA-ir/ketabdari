@@ -356,6 +356,10 @@ async def test_rent_and_return_updates_quantity(client, seeded):
 
     book_res = await client.get(f"/books/{book_id}")
     assert book_res.json()["quantity"] == 0
+    ret = await client.post(f"/rentals/{rental_id}/return")
+    assert ret.status_code == 200
+    book_res = await client.get(f"/books/{book_id}")
+    assert book_res.json()["quantity"] == 1
 
 
 # ---------------- Sorting & Pagination Composition Tests ----------------
