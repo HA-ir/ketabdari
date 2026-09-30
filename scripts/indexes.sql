@@ -10,7 +10,11 @@ CREATE INDEX IF NOT EXISTS idx_rentals_open_due
     ON rentals (due_date)
     WHERE returned_at IS NULL;
 
--- 2) Trigram indexes for case-insensitive substring search (ILIKE '%..%')
+-- 2) Index on rentals(user_id) for /api/v1/users/{user_id}/rentals
+CREATE INDEX IF NOT EXISTS idx_rentals_user_id
+    ON rentals (user_id);
+
+-- 3) Trigram indexes for case-insensitive substring search (ILIKE '%..%')
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS idx_books_title_trgm
