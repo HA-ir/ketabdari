@@ -11,14 +11,14 @@ BASE = sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8888"
 
 ENDPOINTS = [
     ("GET", "/health", None),
-    ("GET", "/users?page=1&size=100", None),
-    ("GET", "/users/1500", None),
-    ("GET", "/users/1500/rentals", None),
-    ("GET", "/books?page=1&size=50", None),
-    ("GET", "/books?page=10&size=50", None),
-    ("GET", "/books?search=clean&page=1&size=20", None),
-    ("GET", "/rentals?page=1&size=50", None),
-    ("GET", "/rentals/overdue", None),
+    ("GET", "/api/v1/users?page=1&size=100", None),
+    ("GET", "/api/v1/users/1500", None),
+    ("GET", "/api/v1/users/1500/rentals", None),
+    ("GET", "/api/v1/books?page=1&size=50", None),
+    ("GET", "/api/v1/books?page=10&size=50", None),
+    ("GET", "/api/v1/books?search=clean&page=1&size=20", None),
+    ("GET", "/api/v1/rentals?page=1&size=50", None),
+    ("GET", "/api/v1/rentals/overdue", None),
 ]
 
 
