@@ -1,27 +1,25 @@
-import os
 from typing import AsyncGenerator
-
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://library:library@localhost:5433/library",
-)
+from ..core.config import settings
 
 engine = create_async_engine(
-    DATABASE_URL,
+    settings.database_url,
     echo=False,
-    # Pool sized for concurrent request handling; pre-opened to avoid
-    # cold-connection latency on first requests after a burst.
-    pool_size=20,
-    max_overflow=10,
-    pool_pre_ping=True,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
+    pool_pre_ping=settings.DB_POOL_PRE_PING,
 )
+
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency yielding an async session."""
     async with SessionLocal() as session:
         yield session
+
+
+# Alias for backward compatibility
+get_db = get_session
