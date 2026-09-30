@@ -69,7 +69,7 @@ async def run_benchmark(count: int = 1000, concurrency: int = 8, warmup: int = 1
         for _ in range(warmup):
             term = random.choice(HIT_TERMS)
             encoded = urllib.parse.quote(term)
-            await client.get(f"{BASE_URL}/books?search={encoded}&page=1&size={page_size}")
+            await client.get(f"{BASE_URL}/api/v1/books?search={encoded}&page=1&size={page_size}")
 
         print(f"Running benchmark: {count} requests with concurrency={concurrency} against {BASE_URL}...")
         latencies = []
@@ -82,7 +82,7 @@ async def run_benchmark(count: int = 1000, concurrency: int = 8, warmup: int = 1
         async def worker(term: str, idx: int):
             nonlocal completed
             encoded = urllib.parse.quote(term)
-            url = f"{BASE_URL}/books?search={encoded}&page=1&size={page_size}"
+            url = f"{BASE_URL}/api/v1/books?search={encoded}&page=1&size={page_size}"
             async with sem:
                 t0 = time.perf_counter()
                 try:
